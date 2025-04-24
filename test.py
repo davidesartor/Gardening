@@ -15,8 +15,8 @@ def plot_growing_trees(sk_IF, val_data, val_labels):
     avg_precision_scores = []
     auc_scores = []
 
-    ordered_indices = sorted_indeces_trees(sk_IF, val_data, val_labels)
-    scores = np.cumsum(tree_train, axis=0) / np.arange(1000).reshape(-1, 1)
+    ordered_indices, scores = sorted_indeces_trees(sk_IF, val_data, val_labels)
+
     # Creating a new IF for every possible number of trees until the maximum has been reached
     for i in range(1, len(sk_IF.estimators_)+1):
         print("Iteration: ", i)

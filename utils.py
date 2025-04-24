@@ -29,7 +29,6 @@ def plot_prc(y_true, y_pred, title=''):
 
     #return auc, average_precision_score
 
-
 def top_k_trees(sk_IF, k, val_data, val_labels, skip=False, indices=None):
 
     new_IF = copy.deepcopy(sk_IF)
@@ -93,6 +92,8 @@ def sorted_indeces_trees(sk_IF, val_data, val_labels):
     # compute the anomaly scores for each data sample
     tree_train = compute_tree_anomaly_scores(sk_IF, val_data)
 
+    scores = np.cumsum(tree_train, axis=0) / np.arange(1,sk_IF.n_estimators + 1).reshape(-1, 1)
+
     # average precision for each tree
     ap_tree_train = np.array([measure(val_labels, - _tree_train_) for _tree_train_ in tree_train])
 
@@ -101,7 +102,7 @@ def sorted_indeces_trees(sk_IF, val_data, val_labels):
 
     sorted_indeces = np.argsort(ap_tree_train)
 
-    return sorted_indeces
+    return sorted_indeces, 2 ** -scores
 
 def pruned_forest(sk_IF, indices):
 
