@@ -1,12 +1,10 @@
 from utils import *
 from toy import *
-import copy
 
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.ensemble import IsolationForest
 from sklearn import metrics
-from sklearn.ensemble._iforest import _average_path_length
 from sklearn.model_selection import train_test_split
 
 
@@ -15,30 +13,39 @@ def plot_growing_trees(sk_IF, val_data, val_labels):
     avg_precision_scores = []
     auc_scores = []
 
-    ordered_indices, scores = sorted_indeces_trees(sk_IF, val_data, val_labels)
+    # a(x_j) = 2 ** -E_i[h_i(x_j)]/c
+    # tt[i,j] = 2 ** -h_i(x_j)/c
+    #  exp(somma(log(tt))/n_trees)
+    n_trees = len(sk_IF.estimators_)
+
+    ordered_indices = sorted_indices_trees(sk_IF, val_data, val_labels)[::-1]  # sort in descending order (best to worst)
+    tree_train = compute_tree_anomaly_scores(sk_IF, test_data)  # shape:(n_trees, test_size)
+    tree_train_ordered = tree_train[ordered_indices, :]
+
+    scores = np.exp(np.cumsum(np.log(tree_train_ordered), axis=0).T / np.arange(1, n_trees+1))
+    scores = scores.T
 
     # Creating a new IF for every possible number of trees until the maximum has been reached
-    for i in range(1, len(sk_IF.estimators_)+1):
-        print("Iteration: ", i)
-        indices = ordered_indices[-i:]
-        i_th_forest = pruned_forest(sk_IF, indices)
-        y_pred = i_th_forest.score_samples(test_data)
-        avg_precision_scores.append(measure(test_labels, -y_pred))
-        auc_scores.append(metrics.roc_auc_score(test_labels, -y_pred))
+    for i in range(len(sk_IF.estimators_)):
+        y_pred = scores[i]  # Scores using first i+1 trees
+        if i == sk_IF.n_estimators - 1:
+            print("y_predfor: ", y_pred)
+        avg_precision_scores.append(measure(test_labels, y_pred))
+        auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
+
 
     # Plotting the average precision scores
     plt.figure(figsize=(5, 5))
-    plt.plot(range(1, len(sk_IF.estimators_)+1), avg_precision_scores)
+    plt.scatter(range(1, len(sk_IF.estimators_)+1), avg_precision_scores, linewidths=0.2)
     plt.xlabel('Number of Trees')
     plt.ylabel('Average Precision Score')
     plt.title('Average Precision Score vs Number of Trees')
     plt.grid(True)
-    plt.show()
     print("Maximum average precision score: ", max(avg_precision_scores), " with: ", avg_precision_scores.index(max(avg_precision_scores))+1, " trees")
 
     # Plotting the AUC scores
     plt.figure(figsize=(5, 5))
-    plt.plot(range(1, len(sk_IF.estimators_)+1), auc_scores)
+    plt.scatter(range(1, len(sk_IF.estimators_)+1), auc_scores, linewidths=0.2)
     plt.xlabel('Number of Trees')
     plt.ylabel('AUC Score')
     plt.title('AUC Score vs Number of Trees')
@@ -87,46 +94,14 @@ if __name__ == '__main__':
     )
 
     # Unsupervised training
-    sk_IF = IsolationForest(n_estimators=1000, random_state=0, ).fit(train_data)
-
-    # Scores using the training set
-    y_pred_train = sk_IF.score_samples(train_data)
-    plot_prc(train_labels, -y_pred_train, "Training set")
-
-    # Scores using the test set
-    y_pred = sk_IF.score_samples(test_data)
-    plot_prc(test_labels, -y_pred, "Test set")
-
-
-    # Plot the anomaly score
-    plt.figure(figsize=(5, 5))
-    plt.scatter(test_data[:, 0], test_data[:, 1], c=y_pred)
-    plt.xlim([-1, 1])
-    plt.ylim([-1, 1])
-    plt.grid(True)
-    #plt.show()
-
-    #################################################
-    # Creating a new IF with the top k trees
-    new_IF = top_k_trees(sk_IF, 100, val_data, val_labels)
-
-    # Scores using the training set
-    y_pred_train_new = new_IF.score_samples(train_data)
-    plot_prc(train_labels, -y_pred_train_new, "Training set")
-
-    # Scores using the test set
-    y_pred_new = new_IF.score_samples(test_data)
-    plot_prc(test_labels, -y_pred_new, "Test set")
-
-    # Plot the new anomaly score
-    plt.figure(figsize=(5, 5))
-    plt.scatter(test_data[:, 0], test_data[:, 1], c=y_pred_new)
-    plt.xlim([-1, 1])
-    plt.ylim([-1, 1])
-    plt.grid(True)
-    plt.show()
+    sk_IF = IsolationForest(n_estimators=100, random_state=0, ).fit(train_data)
 
     # Plotting the average precision and AUC scores for all possible numbers of best trees
+    #sorted_indices_trees(sk_IF, val_data, val_labels)
     plot_growing_trees(sk_IF, val_data, val_labels)
+
+    y_pred = sk_IF.score_samples(test_data)
+    print("y_pred: ", -y_pred)
+    print(measure(test_labels, -y_pred))
 
 

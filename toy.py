@@ -16,11 +16,4 @@ def double_cluster_with_generator(seed):
     data = np.vstack([sx_cluster, dx_cluster, anomaly])
     labels = (np.linalg.norm(data + step, axis=1) > std * 3) & (np.linalg.norm(data - step, axis=1) > std * 3)
 
-    plt.figure(figsize=(5, 5))
-    plt.scatter(data[:, 0], data[:, 1], c=1 - labels, cmap='Set1')
-    plt.xlim([-1, 1])
-    plt.ylim([-1, 1])
-    plt.xticks([])
-    plt.yticks([])
-
     return data, labels
