@@ -11,6 +11,32 @@ from sklearn.model_selection import train_test_split
 def measure(y_true, y_pred):
     return metrics.average_precision_score(y_true, y_pred)
 
+# Function to split data into train, validation, and test sets while keeping the same proportion of labels
+def split_data(data, labels, val_size, test_size, random_state=23):
+
+    # First split: separate test set from train+val
+    data_train_val, data_test, labels_train_val, labels_test = train_test_split(
+        data,
+        labels,
+        test_size=test_size,
+        stratify=labels,
+        random_state=random_state
+    )
+
+    # Calculate the proportion of validation set relative to remaining data
+    val_proportion = val_size / (1 - test_size)
+
+    # Second split: separate train and val from train+val
+    data_train, data_val, labels_train, labels_val = train_test_split(
+        data_train_val,
+        labels_train_val,
+        test_size=val_proportion,
+        stratify=labels_train_val,
+        random_state=random_state
+    )
+
+    return data_train, labels_train, data_val, labels_val, data_test, labels_test
+
 
 def plot_prc(y_true, y_pred, title=''):
     fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred)
@@ -90,14 +116,9 @@ def compute_tree_anomaly_scores(forest, data):
 def sorted_indices_trees(sk_IF, val_data, val_labels):
     # compute the anomaly scores for each data sample
     tree_train = compute_tree_anomaly_scores(sk_IF, val_data)
-    for i in range(len(tree_train)):
-        print(f"Tree {i}: {tree_train[i]}")
 
     # average precision for each tree
     ap_tree_train = np.array([measure(val_labels, tree) for tree in tree_train])
-
-    for i, ap in enumerate(sorted(ap_tree_train), 1):
-        print(f"Tree {i}: Average Precision = {ap:.3f}")
 
     sorted_indices = np.argsort(ap_tree_train)
 
