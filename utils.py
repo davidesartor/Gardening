@@ -2,7 +2,6 @@ import copy
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.ensemble import IsolationForest
 from sklearn import metrics
 from sklearn.ensemble._iforest import _average_path_length
 from sklearn.model_selection import train_test_split

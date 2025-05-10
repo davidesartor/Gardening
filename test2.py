@@ -1,14 +1,9 @@
-from utils import *
-from toy import *
-import copy
+from utils import sorted_indices_trees, measure, split_data, pruned_forest
+from toy import double_cluster_with_generator
 
-import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.ensemble import IsolationForest
 from sklearn import metrics
-from sklearn.ensemble._iforest import _average_path_length
-from sklearn.model_selection import train_test_split
-
 
 def plot_growing_trees_slow(sk_IF, val_data, val_labels):
 

@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 # Generating two randomly distributed clusters of n points with n/20 anomalies
 def double_cluster_with_generator(seed):

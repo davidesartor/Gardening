@@ -1,21 +1,16 @@
-from utils import *
-from toy import *
+from utils import sorted_indices_trees, compute_tree_anomaly_scores, measure, split_data
+from toy import double_cluster_with_generator
 
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.ensemble import IsolationForest
 from sklearn import metrics
-from sklearn.model_selection import train_test_split
-
 
 def score_growing_trees(sk_IF, val_data, val_labels):
 
     avg_precision_scores = []
     auc_scores = []
 
-    # a(x_j) = 2 ** -E_i[h_i(x_j)]/c
-    # tt[i,j] = 2 ** -h_i(x_j)/c
-    #  exp(somma(log(tt))/n_trees)
     n_trees = len(sk_IF.estimators_)
 
     ordered_indices = sorted_indices_trees(sk_IF, val_data, val_labels)[::-1]  # sort in descending order (best to worst)

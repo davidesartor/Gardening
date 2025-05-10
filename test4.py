@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import IsolationForest
 from sklearn import metrics
 
-
 def plot_avg_prc(ap_scores, color = None, label = None, verbose = False):
     mean_ap = np.mean(ap_scores, axis=0)
     std_ap = np.std(ap_scores, axis=0)
@@ -33,9 +32,9 @@ def score_growing_trees(sk_IF, val_data, val_labels):
 
     n_trees = len(sk_IF.estimators_)
 
-    ordered_indices = sorted_indices_trees(sk_IF, val_data, val_labels)[::-1]  # sort in descending order (best to worst)
+    #ordered_indices = sorted_indices_trees(sk_IF, val_data, val_labels)[::-1]  # sort in descending order (best to worst)
     tree_train = compute_tree_anomaly_scores(sk_IF, test_data)  # shape:(n_trees, test_size)
-    tree_train_ordered = tree_train[ordered_indices, :]
+    #tree_train_ordered = tree_train[ordered_indices, :]
 
     scores = np.exp(np.cumsum(np.log(tree_train_ordered), axis=0).T / np.arange(1, n_trees+1))
     scores = scores.T
@@ -47,6 +46,7 @@ def score_growing_trees(sk_IF, val_data, val_labels):
         auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
 
     return avg_precision_scores, auc_scores
+
 
 if __name__ == '__main__':
 
@@ -90,4 +90,3 @@ if __name__ == '__main__':
             plot_avg_prc(all_ap_scores[n], color=c, label=f'{n} Trees')
 
         plt.savefig(f"figures/avg_precision_scores of {dataset_name}.pdf", bbox_inches='tight')
-
