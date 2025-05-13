@@ -144,3 +144,26 @@ def pruned_forest(sk_IF, indices):
     ]
 
     return new_IF
+
+def score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels):
+
+    avg_precision_scores = []
+    auc_scores = []
+
+    n_trees = len(sk_IF.estimators_)
+
+    ordered_indices = sorted_indices_trees(sk_IF, val_data, val_labels)[::-1]  # sort in descending order (best to worst)
+    tree_train = compute_tree_anomaly_scores(sk_IF, test_data)  # shape:(n_trees, test_size)
+    tree_train_ordered = tree_train[ordered_indices, :]
+
+    scores = np.exp(np.cumsum(np.log(tree_train_ordered), axis=0).T / np.arange(1, n_trees+1))
+    scores = scores.T
+
+    # Creating a new IF for every possible number of trees until the maximum has been reached
+    for i in range(len(sk_IF.estimators_)):
+        y_pred = scores[i]  # Scores using first i+1 trees
+        avg_precision_scores.append(measure(test_labels, y_pred))
+        auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
+
+    return avg_precision_scores, auc_scores
+
