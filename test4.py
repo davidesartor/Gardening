@@ -97,9 +97,7 @@ def plot_from_saved_data(save_dir, dataset_name, n_trees):
 if __name__ == "__main__":
     # Define parameters
     n_runs = 10
-    #n_trees = [100, 300, 1000]
-    n_trees = [10,15,20,25,30]
-    #val_sizes = [0.01,0.1, 0.2, 0.5,0.8]
+    n_trees = [100] # Max 20 forests (using tab20 colormap)
     val_sizes = [0.2]
     test_size = 0.2
     main_save_dir = "results"

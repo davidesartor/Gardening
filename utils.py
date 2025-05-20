@@ -124,6 +124,25 @@ def sorted_indices_trees(sk_IF, val_data, val_labels):
     return sorted_indices  # from worst to best tree
 
 
+def compute_tree_scores_rf(forest, data):
+
+    collection_tree_probs = []
+    for tree in forest.estimators_:
+        probs = tree.predict_proba(data)[:, 1]  # probability of class 1
+        collection_tree_probs.append(probs)
+    
+    return np.array(collection_tree_probs)
+
+def sorted_indices_trees_rf(rf, val_data, val_labels):
+
+    tree_probs = compute_tree_scores_rf(rf, val_data)
+    ap_tree = np.array([measure(val_labels, probs) for probs in tree_probs])
+    sorted_indices = np.argsort(ap_tree)  
+    
+    return sorted_indices   # from worst to best tree
+
+
+
 def pruned_forest(sk_IF, indices):
     new_IF = copy.deepcopy(sk_IF)
 
@@ -167,3 +186,55 @@ def score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels):
 
     return avg_precision_scores, auc_scores
 
+def score_growing_trees_rf(sk_RF, val_data, val_labels, test_data, test_labels):
+
+    avg_precision_scores = []
+    auc_scores = []
+
+    n_trees = len(sk_RF.estimators_)
+
+
+    ordered_indices = sorted_indices_trees_rf(sk_RF, val_data, val_labels)[::-1]
+    tree_scores = compute_tree_scores_rf(sk_RF, test_data)
+    tree_scores_ordered = tree_scores[ordered_indices, :]
+
+    # Computing cumulative averages
+    scores = np.cumsum(tree_scores_ordered, axis=0).T / np.arange(1, n_trees+1)
+    scores = scores.T  # Shape: (n_trees, n_samples)
+
+    # Evaluating performance for each number of trees
+    for i in range(n_trees):
+        y_pred = scores[i]  # averaging probabilities using first i+1 trees
+        avg_precision_scores.append(measure(test_labels, y_pred))
+        auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
+
+    return avg_precision_scores, auc_scores
+
+
+# Geometric mean version
+def score_growing_trees_rf_geometric(rf, val_data, val_labels, test_data, test_labels):
+
+    avg_precision_scores = []
+    auc_scores = []
+
+    n_trees = len(rf.estimators_)
+
+    ordered_indices = sorted_indices_trees_rf(rf, val_data, val_labels)[::-1]
+    tree_scores = compute_tree_scores_rf(rf, test_data)  # Shape: (n_trees, n_samples)
+    tree_scores_ordered = tree_scores[ordered_indices, :]
+
+    # Avoid log(0) or log(1) issues
+    epsilon = 1e-10
+    tree_scores_ordered = np.clip(tree_scores_ordered, epsilon, 1 - epsilon)
+
+    # Compute geometric mean of probabilities
+    scores = np.exp(np.cumsum(np.log(tree_scores_ordered), axis=0).T / np.arange(1, n_trees + 1))
+    scores = scores.T  # Shape: (n_trees, n_samples)
+
+    # Evaluate performance for each number of trees
+    for i in range(n_trees):
+        y_pred = scores[i]  # Scores using first i+1 trees
+        avg_precision_scores.append(measure(test_labels, y_pred))
+        auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
+
+    return avg_precision_scores, auc_scores
