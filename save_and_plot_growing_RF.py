@@ -21,8 +21,8 @@ def compute_and_save_rf_scores(dataset_name, data, labels, n_trees, n_runs, val_
         )
 
         for n in n_trees:
-            rf = RandomForestClassifier(n_estimators=n, random_state=current_seed, min_samples_leaf=1, max_features='sqrt',).fit(train_data, train_labels)
             
+            rf = RandomForestClassifier(n_estimators=n, random_state=current_seed, min_samples_leaf=1, max_features='sqrt',).fit(val_data, val_labels)
             ap_scores, auc_scores = score_growing_trees_rf(rf, val_data, val_labels, test_data, test_labels)
             
             all_ap_scores[n].append(ap_scores)
@@ -57,43 +57,37 @@ def plot_avg_prc(ap_scores, color=None, label=None, verbose=False):
         print(f"Max Avg AP: {max(mean_ap):.4f} at {np.argmax(mean_ap) + 1} trees")
 
 def plot_from_saved_data(save_dir, dataset_name, n_trees):
-    
-    data_rf = np.load(os.path.join(save_dir, f"{dataset_name}_rf_scores.npz"), allow_pickle=True)
-    ap_scores_rf = data_rf['ap_scores'].item()
 
-    original_save_dir = "results\\val_size_0.2\\data"
+    data = np.load(os.path.join(save_dir, f"{dataset_name}_rf_scores.npz"), allow_pickle=True)
+    # retrieving the data
+    ap_scores_dict = data['ap_scores'].item()
 
-    data_if = np.load(os.path.join(original_save_dir, f"{dataset_name}_scores.npz"), allow_pickle=True)
-    ap_scores_if = data_if['ap_scores'].item()
-    
     plt.figure(figsize=(10, 7))
     plt.title(f"Average Precision Score vs Number of Trees on {dataset_name}")
-    
-    colormap = plt.colormaps["tab20"]
-    
-    for i, n in enumerate(n_trees):
-        ap_scores = ap_scores_if[n]
-        plot_avg_prc(ap_scores, color=colormap.colors[2*i], label=f'IF {n} Trees')
-        ap_scores = ap_scores_rf[n]
-        plot_avg_prc(ap_scores, color=colormap.colors[2*i+1], label=f'RF {n} Trees')
-   
+
+    colormap = plt.colormaps["tab10"]
+    # plotting for each number of trees
+    for n, color in zip(n_trees, colormap.colors):
+        ap_scores = ap_scores_dict[n]  # Shape: (n_runs, n)
+        plot_avg_prc(ap_scores, color=color, label=f'{n} Trees')
+
+    # configuring axes
     plt.xscale('log')
     plt.xlabel('Number of Trees Used (Cumulative, Log Scale)')
-    plt.ylabel('Average Precision Score (Avg +/- Std Dev over 10 runs)')
+    plt.ylabel(f'Average Precision Score (Avg +/- Std Dev over {n_runs} runs)')
     plt.grid(True, which="both")
     plt.legend()
-    
     save_dir = os.path.dirname(save_dir)
     save_dir = os.path.join(save_dir, "plots")
-    
-    plt.savefig(os.path.join(save_dir, f"comparison_{dataset_name}.pdf"), bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, f"avg_precision_{dataset_name}.pdf"), bbox_inches='tight')
     plt.close()
 
 if __name__ == "__main__":
    
+    # Parameters
     n_runs = 10
-    n_trees = [100]
-    val_sizes = [0.2]
+    n_trees = [100, 300, 1000] # Max 10 forests (using tab10 colormap)
+    val_sizes = [0.01, 0.05, 0.1, 0.2]  
     test_size = 0.2
     main_save_dir = "results_rf"
    
@@ -104,7 +98,8 @@ if __name__ == "__main__":
         data, labels = odds_datasets.load(dataset_name)
         
         for val_size in val_sizes:
-           
+            
+            # creating subdirectories for each validation size
             val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")
             data_dir = os.path.join(val_size_dir, "data")
             plots_dir = os.path.join(val_size_dir, "plots")
@@ -112,16 +107,22 @@ if __name__ == "__main__":
             os.makedirs(data_dir, exist_ok=True)
             os.makedirs(plots_dir, exist_ok=True)
             
-            compute_and_save_rf_scores(
-                dataset_name=dataset_name,
-                data=data,
-                labels=labels,
-                n_trees=n_trees,
-                n_runs=n_runs,
-                val_size=val_size,
-                test_size=test_size,
-                save_dir=data_dir
-            )
+            try:
+                # computing and saving scores
+                compute_and_save_rf_scores(
+                    dataset_name=dataset_name,
+                    data=data,
+                    labels=labels,
+                    n_trees=n_trees,
+                    n_runs=n_runs,
+                    val_size=val_size,
+                    test_size=test_size,
+                    save_dir=data_dir
+                )
+            except ValueError as e:
+                print(f"Error processing {dataset_name} with val_size {val_size}: {e}")
+                continue
             
+            # generating plots from saved data
             plot_from_saved_data(save_dir=data_dir, dataset_name=dataset_name, n_trees=n_trees)
 

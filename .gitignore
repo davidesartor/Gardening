@@ -4,4 +4,8 @@ __pycache__
 main.ipynb
 figures
 results
+results_if
 results_rf
+combined_plots
+results_greedy_if
+combined_plots (val data)

@@ -12,29 +12,37 @@ def measure(y_true, y_pred):
 
 # Function to split data into train, validation, and test sets while keeping the same proportion of labels
 def split_data(data, labels, val_size, test_size, random_state=23):
+    
+    
+    for i in range(10):
+        
+        # First split: separate test set from train+val
+        data_train_val, data_test, labels_train_val, labels_test = train_test_split(
+            data,
+            labels,
+            test_size=test_size,
+            stratify=labels,
+            random_state=random_state+i
+        )
 
-    # First split: separate test set from train+val
-    data_train_val, data_test, labels_train_val, labels_test = train_test_split(
-        data,
-        labels,
-        test_size=test_size,
-        stratify=labels,
-        random_state=random_state
-    )
+        # Calculate the proportion of validation set relative to remaining data
+        val_proportion = val_size / (1 - test_size)
 
-    # Calculate the proportion of validation set relative to remaining data
-    val_proportion = val_size / (1 - test_size)
+        # Second split: separate train and val from train+val
+        data_train, data_val, labels_train, labels_val = train_test_split(
+            data_train_val,
+            labels_train_val,
+            test_size=val_proportion,
+            stratify=labels_train_val,
+            random_state=random_state+i
+        )
+        
+        # Check if the split is valid
+        not_new_split = (0<labels_test.sum() < len(labels_test)) and (0<labels_train.sum() < len(labels_train)) and (0<labels_val.sum() < len(labels_val))
+        if (not_new_split):
+            return data_train, labels_train, data_val, labels_val, data_test, labels_test
 
-    # Second split: separate train and val from train+val
-    data_train, data_val, labels_train, labels_val = train_test_split(
-        data_train_val,
-        labels_train_val,
-        test_size=val_proportion,
-        stratify=labels_train_val,
-        random_state=random_state
-    )
-
-    return data_train, labels_train, data_val, labels_val, data_test, labels_test
+    raise ValueError("Unable to create a valid split with the given parameters after 10 attempts.")
 
 
 def plot_prc(y_true, y_pred, title=''):
@@ -56,7 +64,7 @@ def plot_prc(y_true, y_pred, title=''):
     ax_plot(ax2, recall, precision, 'recall', 'precision',
             title=title + " average precision: {:.3f}".format(average_precision_score))
 
-    #return auc, average_precision_score
+    # return auc, average_precision_score
 
 
 def top_k_trees(sk_IF, k, val_data, val_labels, skip=False, indices=None):
@@ -142,7 +150,6 @@ def sorted_indices_trees_rf(rf, val_data, val_labels):
     return sorted_indices   # from worst to best tree
 
 
-
 def pruned_forest(sk_IF, indices):
     new_IF = copy.deepcopy(sk_IF)
 
@@ -205,35 +212,6 @@ def score_growing_trees_rf(sk_RF, val_data, val_labels, test_data, test_labels):
     # Evaluating performance for each number of trees
     for i in range(n_trees):
         y_pred = scores[i]  # averaging probabilities using first i+1 trees
-        avg_precision_scores.append(measure(test_labels, y_pred))
-        auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
-
-    return avg_precision_scores, auc_scores
-
-
-# Geometric mean version
-def score_growing_trees_rf_geometric(rf, val_data, val_labels, test_data, test_labels):
-
-    avg_precision_scores = []
-    auc_scores = []
-
-    n_trees = len(rf.estimators_)
-
-    ordered_indices = sorted_indices_trees_rf(rf, val_data, val_labels)[::-1]
-    tree_scores = compute_tree_scores_rf(rf, test_data)  # Shape: (n_trees, n_samples)
-    tree_scores_ordered = tree_scores[ordered_indices, :]
-
-    # Avoid log(0) or log(1) issues
-    epsilon = 1e-10
-    tree_scores_ordered = np.clip(tree_scores_ordered, epsilon, 1 - epsilon)
-
-    # Compute geometric mean of probabilities
-    scores = np.exp(np.cumsum(np.log(tree_scores_ordered), axis=0).T / np.arange(1, n_trees + 1))
-    scores = scores.T  # Shape: (n_trees, n_samples)
-
-    # Evaluate performance for each number of trees
-    for i in range(n_trees):
-        y_pred = scores[i]  # Scores using first i+1 trees
         avg_precision_scores.append(measure(test_labels, y_pred))
         auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
 
