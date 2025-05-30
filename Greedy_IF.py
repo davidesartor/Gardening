@@ -1,12 +1,17 @@
-from utils import compute_tree_anomaly_scores, measure, split_data
+import matplotlib
+matplotlib.use('Agg')  # Use a non-interactive backend for saving plots
+from matplotlib import pyplot as plt
+
+from utils import compute_tree_anomaly_scores,measure,split_data
 
 import os
 import odds_datasets
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 from sklearn import metrics
 from sklearn.ensemble import IsolationForest
+from joblib import Parallel, delayed
+
 
 def score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels):
     avg_precision_scores = []
@@ -33,31 +38,37 @@ def score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels):
 
 def sorted_indices_trees_greedy(sk_IF, val_data, val_labels):
     n_trees = len(sk_IF.estimators_)
-    tree_scores = compute_tree_anomaly_scores(sk_IF, val_data)  # (n_trees, n_val_samples)
-
-    # finding best individual tree
-    ap_scores = np.array([measure(val_labels, tree) for tree in tree_scores])
+    tree_scores = compute_tree_anomaly_scores(sk_IF, val_data)
+    
+    # Find best initial tree
+    ap_scores = Parallel(n_jobs=-1)(delayed(measure)(val_labels, tree) for tree in tree_scores)
     best_tree_idx = np.argmax(ap_scores)
     selected_indices = [best_tree_idx]
     available_indices = np.ones(n_trees, dtype=bool)
     available_indices[best_tree_idx] = False
-
     cumulative_log_scores = np.log(tree_scores[best_tree_idx])
 
-    # greedy loop
+    # Greedy selection over available candidates
     for _ in tqdm(range(1, n_trees), leave=False):
-
-        temp_combined = np.exp(cumulative_log_scores + np.log(tree_scores) / (len(selected_indices) + 1))
+        candidate_indices = np.where(available_indices)[0]
+        if len(candidate_indices) == 0:
+            break
         
-        ap = [measure(val_labels, score) for score in temp_combined]
-        ap = np.array(ap)
-
-        best_idx = np.argmax(ap*available_indices)
-        available_indices[best_idx] = False
+        # Compute combined scores only for candidates
+        temp_combined = np.exp(
+            (cumulative_log_scores + np.log(tree_scores[candidate_indices])) / 
+            (len(selected_indices) + 1)
+        )
+        
+        ap_scores = Parallel(n_jobs=-1)(delayed(measure)(val_labels, score) for score in temp_combined)
+        best_candidate_idx = np.argmax(ap_scores)
+        best_idx = candidate_indices[best_candidate_idx]
+        
         selected_indices.append(best_idx)
+        available_indices[best_idx] = False
+        cumulative_log_scores += np.log(tree_scores[best_idx])
         
     return np.array(selected_indices)
-
 
 def compute_and_save_scores(dataset_name, data, labels, n_trees, n_runs, val_size, test_size, save_dir):
 
@@ -65,23 +76,38 @@ def compute_and_save_scores(dataset_name, data, labels, n_trees, n_runs, val_siz
     all_ap_scores = {n: [] for n in n_trees}
     all_auc_scores = {n: [] for n in n_trees}
 
-    for run in tqdm(range(n_runs), desc=f"{dataset_name} - Progress", leave=False):
+    def process_single_run(run):
         current_seed = run
 
         train_data, _, val_data, val_labels, test_data, test_labels = split_data(
             data, labels, val_size=val_size, test_size=test_size, random_state=current_seed
         )
 
+        run_ap_scores = {n: [] for n in n_trees}
+        run_auc_scores = {n: [] for n in n_trees}
+
         # computing scores for each number of trees
         for n in n_trees:
 
             sk_IF = IsolationForest(n_estimators=n, random_state=current_seed).fit(train_data)
-
             ap_scores, auc_scores = score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels)
 
-            all_ap_scores[n].append(ap_scores)
-            all_auc_scores[n].append(auc_scores)
+            run_ap_scores[n] = ap_scores
+            run_auc_scores[n] = auc_scores
 
+        return run_ap_scores, run_auc_scores
+
+    # Parallelize runs using joblib
+    results = Parallel(n_jobs=2)(
+        delayed(process_single_run)(run)
+        for run in tqdm(range(n_runs), desc=f"{dataset_name} - Runs", leave=False)
+    )
+
+    # Aggregate results from all runs
+    for run_ap, run_auc in results:
+        for n in n_trees:
+            all_ap_scores[n].append(run_ap[n])
+            all_auc_scores[n].append(run_auc[n])
 
     # converting lists of lists to 2D NumPy arrays (n_runs, n) 
     ap_scores_dict = {n: np.array(all_ap_scores[n]) for n in n_trees}
@@ -143,8 +169,8 @@ if __name__ == "__main__":
 
     # Parameters
     n_runs = 10
-    n_trees = [100, 300, 1000] # Max 20 forests (using tab20 colormap)
-    val_sizes = [0.01, 0.05, 0.1, 0.2 ]
+    n_trees = [100, 300, 1000] # Max 10 forests (using tab10 colormap)
+    val_sizes = [0.01, 0.05, 0.1, 0.2]
     test_size = 0.2
     main_save_dir = "results_greedy_if"
 
@@ -153,7 +179,7 @@ if __name__ == "__main__":
         os.makedirs(main_save_dir)
 
 
-    for dataset_name in tqdm(odds_datasets.small_datasets_names, desc="Processing datasets"):
+    for dataset_name in tqdm(odds_datasets.datasets_names, desc="Processing datasets"):
 
         data, labels = odds_datasets.load(dataset_name)
 

@@ -231,3 +231,247 @@ def sorted_indices_trees_greedy(sk_IF, val_data, val_labels):
             available_indices.pop(0)
 
     return np.array(selected_indices)
+
+
+
+    --------------------
+
+
+    import matplotlib
+matplotlib.use('Agg')  # Use a non-interactive backend for saving plots
+from matplotlib import pyplot as plt
+
+from utils import compute_tree_anomaly_scores, measure, split_data
+
+import os
+import odds_datasets
+import numpy as np
+from tqdm import tqdm
+from sklearn import metrics
+from sklearn.ensemble import IsolationForest
+from joblib import Parallel, delayed
+import cProfile # Import cProfile
+import pstats # Import pstats for better output formatting
+
+def score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels):
+    avg_precision_scores = []
+    auc_scores = []
+
+    n_trees = len(sk_IF.estimators_)
+
+    # Get tree indices using greedy approach
+    ordered_indices = sorted_indices_trees_greedy(sk_IF, val_data, val_labels)
+    tree_train = compute_tree_anomaly_scores(sk_IF, test_data)  # Shape: (n_trees, n_test_samples)
+    tree_train_ordered = tree_train[ordered_indices, :]  # Reorder by greedy selection
+
+    # Compute cumulative geometric mean of anomaly scores
+    scores = np.exp(np.cumsum(np.log(tree_train_ordered), axis=0).T / np.arange(1, n_trees+1))
+    scores = scores.T  # Shape: (n_trees, n_test_samples)
+
+    # Evaluate performance for each number of trees
+    for i in range(n_trees):
+        y_pred = scores[i]  # Scores using first i+1 trees
+        avg_precision_scores.append(measure(test_labels, y_pred))
+        auc_scores.append(metrics.roc_auc_score(test_labels, y_pred))
+
+    return avg_precision_scores, auc_scores
+
+def sorted_indices_trees_greedy(sk_IF, val_data, val_labels):
+
+    n_trees = len(sk_IF.estimators_)
+    tree_scores = compute_tree_anomaly_scores(sk_IF, val_data)  # (n_trees, n_val_samples)
+    tree_scores = tree_scores.astype(np.float32)
+
+    # Finding best individual tree (parallelized)
+    ap_scores = np.array([measure(val_labels, tree) for tree in tree_scores])
+    best_tree_idx = np.argmax(ap_scores)
+    selected_indices = [best_tree_idx]
+    available_indices = np.ones(n_trees, dtype=bool)
+    available_indices[best_tree_idx] = False
+
+    cumulative_log_scores = np.log(tree_scores[best_tree_idx])
+
+    # Greedy loop
+    for _ in tqdm(range(1, n_trees), leave=False):
+ 
+        # Corrected geometric mean computation
+        temp_combined = np.exp((cumulative_log_scores + np.log(tree_scores)) / (len(selected_indices) + 1))
+        
+        # Parallelized average precision computation
+        ap = [measure(val_labels, score) for score in temp_combined]
+        ap = np.array(ap)
+
+        best_idx = np.argmax(ap * available_indices)
+        available_indices[best_idx] = False
+        selected_indices.append(best_idx)
+        
+        # Update cumulative log scores
+        cumulative_log_scores += np.log(tree_scores[best_idx])
+        
+    return np.array(selected_indices)
+
+def compute_and_save_scores(dataset_name, data, labels, n_trees, n_runs, val_size, test_size, save_dir):
+
+    # dictionaries to store scores
+    all_ap_scores = {n: [] for n in n_trees}
+    all_auc_scores = {n: [] for n in n_trees}
+
+    def process_single_run(run):
+        current_seed = run
+
+        train_data, _, val_data, val_labels, test_data, test_labels = split_data(
+            data, labels, val_size=val_size, test_size=test_size, random_state=current_seed
+        )
+
+        run_ap_scores = {n: [] for n in n_trees}
+        run_auc_scores = {n: [] for n in n_trees}
+
+        # computing scores for each number of trees
+        for n in n_trees:
+
+            sk_IF = IsolationForest(n_estimators=n, random_state=current_seed).fit(train_data)
+            ap_scores, auc_scores = score_growing_trees(sk_IF, val_data, val_labels, test_data, test_labels)
+
+            run_ap_scores[n] = ap_scores
+            run_auc_scores[n] = auc_scores
+
+        return run_ap_scores, run_auc_scores
+
+    # Parallelize runs using joblib
+    results = Parallel(n_jobs=1)(
+        delayed(process_single_run)(run)
+        for run in tqdm(range(n_runs), desc=f"{dataset_name} - Runs", leave=False)
+    )
+
+    # Aggregate results from all runs
+    for run_ap, run_auc in results:
+        for n in n_trees:
+            all_ap_scores[n].append(run_ap[n])
+            all_auc_scores[n].append(run_auc[n])
+
+    # converting lists of lists to 2D NumPy arrays (n_runs, n) 
+    ap_scores_dict = {n: np.array(all_ap_scores[n]) for n in n_trees}
+    auc_scores_dict = {n: np.array(all_auc_scores[n]) for n in n_trees}
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    np.savez(
+        os.path.join(save_dir, f"{dataset_name}_if_scores.npz"),
+        ap_scores=ap_scores_dict,
+        auc_scores=auc_scores_dict,
+        allow_pickle=True
+    )
+
+def plot_avg_prc(ap_scores, color=None, label=None, verbose=False):
+
+    mean_ap = np.mean(ap_scores, axis=0)
+    std_ap = np.std(ap_scores, axis=0)
+    x = range(1, len(mean_ap) + 1)
+
+    if color is not None:
+        plt.plot(x, mean_ap, color=color, label=label)
+        plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, color=color, alpha=0.2)
+    else:
+        plt.plot(x, mean_ap, label=label)
+        plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, alpha=0.2)
+
+    if verbose:
+        print("\n--- Average Precision Scores ---")
+        print(f"Max Avg AP: {max(mean_ap):.4f} at {np.argmax(mean_ap) + 1} trees")
+
+def plot_from_saved_data(save_dir, dataset_name, n_trees):
+
+    data = np.load(os.path.join(save_dir, f"{dataset_name}_if_scores.npz"), allow_pickle=True)
+    # retrieving the data
+    ap_scores_dict = data['ap_scores'].item()
+
+    plt.figure(figsize=(10, 7))
+    plt.title(f"Average Precision Score vs Number of Trees on {dataset_name}")
+
+    colormap = plt.colormaps["tab10"]
+    # plotting for each number of trees
+    for n, color in zip(n_trees, colormap.colors):
+        ap_scores = ap_scores_dict[n]  # (n_runs, n)
+        plot_avg_prc(ap_scores, color=color, label=f'{n} Trees')
+
+    # configuring axes
+    plt.xscale('log')
+    plt.xlabel('Number of Trees Used (Cumulative, Log Scale)')
+    plt.ylabel(f'Average Precision Score (Avg +/- Std Dev over {n_runs} runs)')
+    plt.grid(True, which="both")
+    plt.legend()
+    save_dir = os.path.dirname(save_dir)
+    save_dir = os.path.join(save_dir, "plots")
+    plt.savefig(os.path.join(save_dir, f"avg_precision_{dataset_name}.pdf"), bbox_inches='tight')
+    plt.close()
+
+if __name__ == "__main__":
+    # Parameters
+    n_runs = 10
+    n_trees = [100] # Max 10 forests (using tab10 colormap)
+    val_sizes = [0.01, 0.05, 0.1, 0.2]
+    test_size = 0.2
+    main_save_dir = "results_greedy_if"
+
+    # creating main results directory if it doesn't exist
+    if not os.path.exists(main_save_dir):
+        os.makedirs(main_save_dir)
+
+    for dataset_name in tqdm(odds_datasets.small_datasets_names, desc="Processing datasets"):
+        data, labels = odds_datasets.load(dataset_name)
+
+        for val_size in val_sizes:
+            # creating subdirectories for each validation size
+            val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")
+            data_dir = os.path.join(val_size_dir, "data")
+            plots_dir = os.path.join(val_size_dir, "plots")
+            os.makedirs(data_dir, exist_ok=True)
+            os.makedirs(plots_dir, exist_ok=True)
+
+            # --- Start Profiling compute_and_save_scores only ---
+            profiler_compute_save = cProfile.Profile()
+            profiler_compute_save.enable()
+
+            try:
+                compute_and_save_scores(
+                    dataset_name=dataset_name,
+                    data=data,
+                    labels=labels,
+                    n_trees=n_trees,
+                    n_runs=n_runs,
+                    val_size=val_size,
+                    test_size=test_size,
+                    save_dir=data_dir
+                )
+
+            except ValueError as e:
+                print(f"Error processing {dataset_name} with val_size {val_size}: {e}")
+                # If an error occurs and the file wasn't saved, we should skip plotting
+                profiler_compute_save.disable() # Still disable to get partial stats if any
+                continue # Move to the next iteration
+
+            # --- End Profiling compute_and_save_scores only ---
+            # IMPORTANT: Disable the profiler *after* the function has completed its work,
+            # including any internal file saving operations.
+            profiler_compute_save.disable()
+
+            # Save and print the profiling results for compute_and_save_scores
+            stats_file_compute_save = f"profiling_results_compute_save_{dataset_name}_val_{val_size}.prof"
+            profiling_output_txt = f"profiling_output_compute_save_{dataset_name}_val_{val_size}.txt"
+
+            profiler_compute_save.dump_stats(stats_file_compute_save)
+
+            with open(profiling_output_txt, "w") as f:
+                ps_compute_save = pstats.Stats(stats_file_compute_save, stream=f)
+                ps_compute_save.strip_dirs()
+                ps_compute_save.sort_stats('cumulative')
+                ps_compute_save.print_stats()
+
+            print(f"Profiling results for '{dataset_name}' (val_size={val_size}) saved to '{os.path.abspath(profiling_output_txt)}'")
+
+            # generating plots from saved data
+            # This call should now reliably find the .npz file
+            plot_from_saved_data(save_dir=data_dir, dataset_name=dataset_name, n_trees=n_trees)
+
+    print("\nProfiling of 'compute_and_save_scores' completed for all datasets and validation sizes.")
+    print("Individual profiling results are saved in '.prof' and '.txt' files.")

@@ -8,4 +8,6 @@ results_if
 results_rf
 combined_plots
 results_greedy_if
-combined_plots (val data)
+ex.txt
+combined_plots_greedy
+plot.py

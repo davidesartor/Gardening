@@ -106,49 +106,117 @@ def plot_from_saved_data(save_dir, dataset_name, n_trees):
     plt.savefig(os.path.join(save_dir, f"avg_precision_{dataset_name}.pdf"), bbox_inches='tight')
     plt.close()
 
+def plot_from_saved_data_by_n_trees(main_save_dir, dataset_name, n_trees_list, val_sizes_list, n_runs):
+
+    # Aggregate AP scores from all val_size subdirectories for the current dataset
+    aggregated_ap_data = {n: {} for n in n_trees_list}
+
+    for val_size in val_sizes_list:
+        data_dir = os.path.join(main_save_dir, f"val_size_{val_size}", "data")
+        file_path = os.path.join(data_dir, f"{dataset_name}_if_scores.npz")
+
+        if not os.path.exists(file_path):
+            print(f"Warning: Data file not found for {dataset_name}, val_size={val_size}. Skipping.")
+            continue
+
+        loaded_data = np.load(file_path, allow_pickle=True)
+        ap_scores_dict_for_val_size = loaded_data['ap_scores'].item()
+
+        for n_estimators_key in n_trees_list:
+            if n_estimators_key in ap_scores_dict_for_val_size:
+                aggregated_ap_data[n_estimators_key][val_size] = ap_scores_dict_for_val_size[n_estimators_key]
+            else:
+                print(f"Warning: No data for n_trees={n_estimators_key} in {file_path}. Skipping.")
+
+    # Generate plots, one for each N in n_trees_list
+    for n_trees_val in n_trees_list:
+        plot_save_dir = os.path.join(main_save_dir, f"plots_n_trees_{n_trees_val}")
+        os.makedirs(plot_save_dir, exist_ok=True)
+
+        plt.figure(figsize=(10, 7))
+        plt.title(f"Avg Precision vs Num Trees (N={n_trees_val}) on {dataset_name}")
+
+        colormap = plt.colormaps["tab10"] # Using tab10 colormap
+        colors = [colormap(i) for i in range(len(val_sizes_list))] # Get colors from colormap
+
+        # Plot AP for different validation sizes
+        for i, val_size in enumerate(val_sizes_list):
+            if val_size in aggregated_ap_data[n_trees_val]:
+                ap_scores = aggregated_ap_data[n_trees_val][val_size]
+                plot_avg_prc(ap_scores, color=colors[i], label=f'Val Size: {val_size}')
+            else:
+                print(f"Skipping plot for n_trees={n_trees_val}, val_size={val_size} due to missing data.")
+
+        plt.xscale('log')
+        plt.xlabel('Number of Trees Used (Cumulative, Log Scale)')
+        plt.ylabel(f'Average Precision (Avg +/- Std Dev over {n_runs} runs)')
+        plt.grid(True, which="both")
+        plt.legend()
+        plt.savefig(os.path.join(plot_save_dir, f"avg_precision_{dataset_name}_N_{n_trees_val}.pdf"), bbox_inches='tight')
+        plt.close()
+
 if __name__ == "__main__":
-    # parameters
+    # Parameters
     n_runs = 10
-    n_trees = [100, 300, 1000] # Max 10 forests (using tab10 colormap)
-    val_sizes = [0.01, 0.05, 0.1, 0.2] 
+    n_trees = [100, 300, 1000]
+    val_sizes = [0.01, 0.05, 0.1, 0.2]
     test_size = 0.2
     main_save_dir = "results_if"
-
 
     if not os.path.exists(main_save_dir):
         os.makedirs(main_save_dir)
 
-    # Iterate over datasets
-    for dataset_name in tqdm(odds_datasets.small_datasets_names, desc="Processing datasets"):
-        # Load dataset
+    # Set to True to compute and save scores, False to only plot from existing data
+    COMPUTE_AND_SAVE_DATA = False
+    # Set to 'by_val_size' for original plotting, 'by_n_trees' for new plotting
+    PLOTTING_MODE = "by_val_size" #'by_val_size' or 'by_n_trees' or None
+
+    for dataset_name in tqdm(odds_datasets.datasets_names, desc="Processing datasets"):
         data, labels = odds_datasets.load(dataset_name)
 
-        # Iterate over validation sizes
-        for val_size in val_sizes:
+        if COMPUTE_AND_SAVE_DATA:
+            for val_size in val_sizes:
+                val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")
+                data_dir = os.path.join(val_size_dir, "data")
+                plots_dir = os.path.join(val_size_dir, "plots") # This plots_dir is for the 'by_val_size' plots
+                os.makedirs(data_dir, exist_ok=True)
+                os.makedirs(plots_dir, exist_ok=True)
 
-            # Create a subdirectories
-            val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")
-            data_dir = os.path.join(val_size_dir, "data")
-            plots_dir = os.path.join(val_size_dir, "plots")
-            os.makedirs(data_dir, exist_ok=True)
-            os.makedirs(plots_dir, exist_ok=True)
+                try:
+                    compute_and_save_scores(
+                        dataset_name=dataset_name,
+                        data=data,
+                        labels=labels,
+                        n_trees=n_trees,
+                        n_runs=n_runs,
+                        val_size=val_size,
+                        test_size=test_size,
+                        save_dir=data_dir
+                    )
+                except ValueError as e:
+                    print(f"Error processing {dataset_name} with val_size {val_size}: {e}")
+                    continue
 
-            try:
-                # Compute and save scores
-                compute_and_save_scores(
-                    dataset_name=dataset_name,
-                    data=data,
-                    labels=labels,
-                    n_trees=n_trees,
-                    n_runs=n_runs,
-                    val_size=val_size,
-                    test_size=test_size,
-                    save_dir=data_dir
-                )
+        # Plotting based on chosen mode
+        if PLOTTING_MODE == None:
+            continue
 
-            except ValueError as e:
-                print(f"Error processing {dataset_name} with val_size {val_size}: {e}")
-                continue
-
-            # Generate and save plots
-            plot_from_saved_data(save_dir=data_dir, dataset_name=dataset_name, n_trees=n_trees)
+        elif PLOTTING_MODE == 'by_val_size':
+            for val_size in val_sizes:
+                val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")
+                data_dir = os.path.join(val_size_dir, "data") # Data path for this val_size
+                try:
+                    plot_from_saved_data(save_dir=data_dir, dataset_name=dataset_name, n_trees=n_trees)
+                except FileNotFoundError as e:
+                    print(f"File not found for {dataset_name} with val_size {val_size}: {e}")
+                    continue
+                
+        elif PLOTTING_MODE == 'by_n_trees':
+            # This function uses the main_save_dir to find all val_size data
+            plot_from_saved_data_by_n_trees(
+                main_save_dir=main_save_dir,
+                dataset_name=dataset_name,
+                n_trees_list=n_trees,
+                val_sizes_list=val_sizes,
+                n_runs=n_runs
+            )
