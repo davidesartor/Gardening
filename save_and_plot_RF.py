@@ -136,7 +136,7 @@ def plot_by_n_trees_rf(main_save_dir, dataset_name, n_trees_list, val_sizes_list
         stds_across_val_sizes = []
         valid_val_sizes_for_plot = []
 
-        for i, val_size in enumerate(val_sizes_list):
+        for val_size in val_sizes_list:
             if val_size in aggregated_ap_data[n_trees_val]:
                 ap_scores = aggregated_ap_data[n_trees_val][val_size]
                 means_across_val_sizes.append(np.mean(ap_scores))
