@@ -103,6 +103,7 @@ def plot_from_saved_data(save_dir, dataset_name, n_trees):
     plt.legend()
     save_dir = os.path.dirname(save_dir)
     save_dir = os.path.join(save_dir, "plots")
+    plt.ylim(0, 1)
     plt.savefig(os.path.join(save_dir, f"avg_precision_{dataset_name}.pdf"), bbox_inches='tight')
     plt.close()
 
@@ -152,6 +153,7 @@ def plot_from_saved_data_by_n_trees(main_save_dir, dataset_name, n_trees_list, v
         plt.ylabel(f'Average Precision (Avg +/- Std Dev over {n_runs} runs)')
         plt.grid(True, which="both")
         plt.legend()
+        plt.ylim(0, 1)
         plt.savefig(os.path.join(plot_save_dir, f"avg_precision_{dataset_name}_N_{n_trees_val}.pdf"), bbox_inches='tight')
         plt.close()
 
@@ -169,7 +171,7 @@ if __name__ == "__main__":
     # Set to True to compute and save scores, False to only plot from existing data
     COMPUTE_AND_SAVE_DATA = False
     # Set to 'by_val_size' for original plotting, 'by_n_trees' for new plotting
-    PLOTTING_MODE = "by_val_size" #'by_val_size' or 'by_n_trees' or None
+    PLOTTING_MODE = "by_n_trees" #'by_val_size' or 'by_n_trees' or None
 
     for dataset_name in tqdm(odds_datasets.datasets_names, desc="Processing datasets"):
         data, labels = odds_datasets.load(dataset_name)
