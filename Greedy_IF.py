@@ -122,19 +122,23 @@ def compute_and_save_scores(dataset_name, data, labels, n_trees, n_runs, val_siz
         allow_pickle=True
     )
 
+
 def compute_bruteforce_points(dataset_name, data, labels, n_trees, n_runs, bf_values, max_iter, val_size, test_size,
                               save_dir):
     all_ap_bf_scores = {n: [] for n in n_trees}
     all_max_ap_bf_scores = {n: [] for n in n_trees}
 
     def process_single_bf_run(run_seed, n_estimators):
+
         np.random.seed(run_seed)
-        train_data, _, _, _, test_data, test_labels = split_data(
+
+        train_data, _, val_data, val_label, test_data, test_labels = split_data(
             data, labels, val_size=val_size, test_size=test_size, random_state=run_seed
         )
 
         sk_IF = IsolationForest(n_estimators=n_estimators, random_state=run_seed, n_jobs=-1).fit(train_data)
-        tree_train = compute_tree_anomaly_scores(sk_IF, test_data).astype(np.float32)  # (n_estimators, n_test)
+        tree_train = compute_tree_anomaly_scores(sk_IF, val_data).astype(np.float32)  # (n_estimators, n_test)
+        tree_test = compute_tree_anomaly_scores(sk_IF, test_data).astype(np.float32)
 
         ap_bf_scores_for_run = []
         max_ap_bf_scores_for_run = []
@@ -148,17 +152,15 @@ def compute_bruteforce_points(dataset_name, data, labels, n_trees, n_runs, bf_va
         for x in bf_values:
             if x <= n_estimators:
                 # Use list comprehension
-                scores = [np.exp(np.mean(np.log(tree_train[idx, :]), axis=0)) for idx in random_indices[x]]
-                ap_list_for_x = [measure(test_labels, s) for s in scores]
+                scores_train = [np.exp(np.mean(np.log(tree_train[idx, :]), axis=0)) for idx in random_indices[x]]
+                scores_test = [np.exp(np.mean(np.log(tree_test[idx, :]), axis=0)) for idx in random_indices[x]]
+                ap_train_list_for_x = [measure(val_label, s) for s in scores_train]
+                ap_test_list_for_x = [measure(val_label, s) for s in scores_test]
                 
-                # Optional: vectorized version (change 4) – uncomment to try
-                # scores_matrix = np.stack(scores)
-                # ap_list_for_x = average_precision_score(
-                #     np.tile(test_labels, (scores_matrix.shape[0], 1)), scores_matrix, average=None
-                # ).tolist()
+                max_index = np.argmax(np.array(ap_train_list_for_x))
 
-                ap_bf_scores_for_run.append(np.mean(ap_list_for_x))
-                max_ap_bf_scores_for_run.append(np.max(ap_list_for_x))
+                ap_bf_scores_for_run.append(np.mean(ap_test_list_for_x))
+                max_ap_bf_scores_for_run.append(ap_test_list_for_x[max_index])
             else:
                 ap_bf_scores_for_run.append(np.nan)
                 max_ap_bf_scores_for_run.append(np.nan)
@@ -233,7 +235,6 @@ def plot_from_saved_data(save_dir, dataset_name, n_trees, n_runs):
     plt.legend()
     save_dir = os.path.dirname(save_dir)
     save_dir = os.path.join(save_dir, "plots")
-    plt.ylim(0, 1)
     plt.savefig(os.path.join(save_dir, f"avg_precision_{dataset_name}.pdf"), bbox_inches='tight')
     plt.close()
 
@@ -305,7 +306,6 @@ def plot_bf_points(save_dir, dataset_name, n_trees, bf_values, n_runs, max_iter)
     plt.legend()
     save_dir = os.path.dirname(save_dir)
     save_dir = os.path.join(save_dir, "plots")
-    plt.ylim(0, 1)
     plt.savefig(os.path.join(save_dir, f"avg_precision_{dataset_name}_with_bf.pdf"), bbox_inches='tight')
     plt.close()
 
@@ -315,97 +315,72 @@ n_trees = [100, 300, 1000]
 val_sizes = [0.01, 0.05, 0.1, 0.2]
 test_size = 0.2
 max_iter = 5000
-bf_values = [10, 50, 100, 300, 800]
+bf_values = [10, 50, 100, 300, 800] # Increased bf_values to include points for higher n_trees
 main_save_dir = "results_greedy_if"
 
-# Control switches (mutually exclusive)
-COMPUTE_GREEDY_ONLY = False
-PLOT_GREEDY_ONLY = False
-COMPUTE_BF_ONLY = False
-PLOT_BF_ONLY = False
+# creating main results directory if it doesn't exist
+if not os.path.exists(main_save_dir):
+    os.makedirs(main_save_dir)
 
-# Validate switches
-switches = [COMPUTE_GREEDY_ONLY, PLOT_GREEDY_ONLY, COMPUTE_BF_ONLY, PLOT_BF_ONLY]
-if sum(switches) > 1:
-    raise ValueError("Only one of COMPUTE_GREEDY_ONLY, PLOT_GREEDY_ONLY, COMPUTE_BF_ONLY, or PLOT_BF_ONLY can be True")
-elif sum(switches) == 0:
-    print("No specific mode selected; computing and plotting both greedy and brute-force")
-
-os.makedirs(main_save_dir, exist_ok=True)
 
 for dataset_name in tqdm(odds_datasets.small_datasets_names, desc="Processing datasets"):
-    try:
-        data, labels = odds_datasets.load(dataset_name)
-    except Exception as e:
-        print(f"Error loading dataset {dataset_name}: {e}")
-        continue
+
+    data, labels = odds_datasets.load(dataset_name)
 
     for val_size in val_sizes:
+
+        # creating subdirectories for each validation size
         val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")
         data_dir = os.path.join(val_size_dir, "data")
         plots_dir = os.path.join(val_size_dir, "plots")
-        print(f"Processing {dataset_name} with val_size {val_size}, data_dir: {data_dir}, plots_dir: {plots_dir}")
+        os.makedirs(data_dir, exist_ok=True)
+        os.makedirs(plots_dir, exist_ok=True)
 
-        # Create directories only if needed
-        if COMPUTE_GREEDY_ONLY or COMPUTE_BF_ONLY or not any(switches):
-            os.makedirs(data_dir, exist_ok=True)
-        if PLOT_GREEDY_ONLY or PLOT_BF_ONLY or not any(switches):
-            os.makedirs(plots_dir, exist_ok=True)
-
+        # computing and saving greedy scores
         try:
-            # Greedy computation
-            if COMPUTE_GREEDY_ONLY or not any(switches):
-                compute_and_save_scores(
-                    dataset_name=dataset_name,
-                    data=data,
-                    labels=labels,
-                    n_trees=n_trees,
-                    n_runs=n_runs,
-                    val_size=val_size,
-                    test_size=test_size,
-                    save_dir=data_dir
-                )
+            pass
+            #compute_and_save_scores(
+            #    dataset_name=dataset_name,
+            #    data=data,
+            #    labels=labels,
+            #    n_trees=n_trees,
+            #    n_runs=n_runs,
+            #    val_size=val_size,
+            #    test_size=test_size,
+            #    save_dir=data_dir
+            #)
 
-            # Greedy plotting
-            if PLOT_GREEDY_ONLY or not any(switches):
-                if not os.path.exists(os.path.join(data_dir, f"{dataset_name}_if_ap_corr.npz")):
-                    print(f"Skipping greedy plotting for {dataset_name} with val_size {val_size}: .npz file missing")
-                    continue
-                plot_from_saved_data(save_dir=data_dir, dataset_name=dataset_name, n_trees=n_trees, n_runs=n_runs)
-
-            # Brute-force computation
-            if COMPUTE_BF_ONLY or not any(switches):
-                compute_bruteforce_points(
-                    dataset_name=dataset_name,
-                    data=data,
-                    labels=labels,
-                    n_trees=n_trees,
-                    n_runs=n_runs,
-                    bf_values=bf_values,
-                    max_iter=max_iter,
-                    val_size=val_size,
-                    test_size=test_size,
-                    save_dir=data_dir
-                )
-
-            # Brute-force plotting
-            if PLOT_BF_ONLY or not any(switches):
-                if not os.path.exists(os.path.join(data_dir, f"{dataset_name}_bf_points.npz")):
-                    print(f"Skipping BF plotting for {dataset_name} with val_size {val_size}: .npz file missing")
-                    continue
-                plot_bf_points(
-                    save_dir=data_dir,
-                    dataset_name=dataset_name,
-                    n_trees=n_trees,
-                    bf_values=bf_values,
-                    n_runs=n_runs,
-                    max_iter=max_iter
-                )
-
-        except (ValueError, FileNotFoundError) as e:
+        except ValueError as e:
             print(f"Error processing {dataset_name} with val_size {val_size}: {e}")
             continue
-        except Exception as e:
-            print(f"Unexpected error processing {dataset_name} with val_size {val_size}: {e}")
-            continue
 
+        # generating plots from saved greedy data
+        #plot_from_saved_data(save_dir=data_dir, dataset_name=dataset_name, n_trees=n_trees, n_runs=n_runs)
+
+        # computing bruteforce points
+        try:
+            #compute_bruteforce_points(
+            #    dataset_name=dataset_name,
+            #    data=data,
+            #    labels=labels,
+            #    n_trees=n_trees,
+            #    n_runs=n_runs,
+            #    bf_values=bf_values,
+            #    max_iter=max_iter,
+            #    val_size=val_size,
+            #    test_size=test_size,
+            #    save_dir=data_dir
+            #)
+
+            # plotting bruteforce points
+            plot_bf_points(
+                save_dir=data_dir,
+                dataset_name=dataset_name,
+                n_trees=n_trees,
+                bf_values=bf_values,
+                n_runs=n_runs,
+                max_iter=max_iter
+            )
+        except (ValueError, FileNotFoundError) as e:
+            print(f"Error processing {dataset_name} with val_size {val_size} for bruteforce: {e}")
+            continue
