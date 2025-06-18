@@ -5,23 +5,8 @@ import os
 import odds_datasets
 import numpy as np
 from tqdm import tqdm
+from utils import plot_avg_prc
 
-def plot_avg_prc(ap_scores, color=None, label=None, verbose=False):
-
-    mean_ap = np.mean(ap_scores, axis=0)
-    std_ap = np.std(ap_scores, axis=0)
-    x = range(1, len(mean_ap) + 1)
-
-    if color is not None:
-        plt.plot(x, mean_ap, color=color, label=label)
-        plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, color=color, alpha=0.2)
-    else:
-        plt.plot(x, mean_ap, label=label)
-        plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, alpha=0.2)
-
-    if verbose:
-        print("\n--- Average Precision Scores ---")
-        print(f"Max Avg AP: {max(mean_ap):.4f} at {np.argmax(mean_ap) + 1} trees")
 
 def plot_from_saved_data(save_dir, dataset_name, n_trees, n_runs):
 
