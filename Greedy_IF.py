@@ -152,12 +152,12 @@ def compute_bruteforce_points(dataset_name, data, labels, n_trees, n_runs, bf_va
         for x in bf_values:
             if x <= n_estimators:
                 # Use list comprehension
-                scores_train = [np.exp(np.mean(np.log(tree_train[idx, :]), axis=0)) for idx in random_indices[x]]
+                scores_val = [np.exp(np.mean(np.log(tree_train[idx, :]), axis=0)) for idx in random_indices[x]]
                 scores_test = [np.exp(np.mean(np.log(tree_test[idx, :]), axis=0)) for idx in random_indices[x]]
-                ap_train_list_for_x = [measure(val_label, s) for s in scores_train]
-                ap_test_list_for_x = [measure(val_label, s) for s in scores_test]
+                ap_val_list_for_x = [measure(val_label, s) for s in scores_val]
+                ap_test_list_for_x = [measure(test_labels, s) for s in scores_test]
                 
-                max_index = np.argmax(np.array(ap_train_list_for_x))
+                max_index = np.argmax(np.array(ap_val_list_for_x))
 
                 ap_bf_scores_for_run.append(np.mean(ap_test_list_for_x))
                 max_ap_bf_scores_for_run.append(ap_test_list_for_x[max_index])

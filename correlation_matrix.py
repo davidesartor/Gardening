@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from utils import sorted_indices_trees
 
 
-def compute_and_save_correlation(dataset_name, data, labels, n_trees, n_runs, val_size, test_size, save_dir):
+def compute_and_save_correlation(dataset_name, data, labels, n_trees, val_size, test_size, save_dir):
 
     current_seed = 42
 
@@ -88,7 +88,6 @@ def plot_correlation_matrices(save_dir, dataset_name, n_trees):
     )
 
 # Parameters
-n_runs = 10
 n_trees = [100, 300, 1000]
 val_sizes = [0.01, 0.05, 0.1, 0.2]
 test_size = 0.2
@@ -120,7 +119,6 @@ for dataset_name in tqdm(odds_datasets.datasets_names, desc="Processing datasets
                     data=data,
                     labels=labels,
                     n_trees=n_trees,
-                    n_runs=n_runs,
                     val_size=val_size,
                     test_size=test_size,
                     save_dir=data_dir
