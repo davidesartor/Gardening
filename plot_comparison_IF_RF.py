@@ -61,9 +61,6 @@ def plot_combined_results(ap_scores_if, ap_scores_rf, dataset_name, val_size, sa
     plt.close()
 
 
-
-
-
 if __name__ == "__main__":
 
     n_trees = [100, 300, 1000]

@@ -44,7 +44,6 @@ def split_data(data, labels, val_size, test_size, random_state=23):
 
     raise ValueError("Unable to create a valid split with the given parameters after 10 attempts.")
 
-
 def plot_prc(y_true, y_pred, title=''):
     fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred)
     auc = metrics.auc(fpr, tpr)
@@ -54,10 +53,10 @@ def plot_prc(y_true, y_pred, title=''):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=[5 * 2, 5])
 
     def ax_plot(ax, x, y, xlabel, ylabel, title=''):
-        ax.plot(x, y);
-        ax.set_xlabel(xlabel),;
+        ax.plot(x, y)
+        ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_title(title);
+        ax.set_title(title)
         ax.grid()
 
     ax_plot(ax1, fpr, tpr, 'fpr', 'tpr', title=title + " auc: {:.3f}".format(auc))
@@ -65,7 +64,6 @@ def plot_prc(y_true, y_pred, title=''):
             title=title + " average precision: {:.3f}".format(average_precision_score))
 
     # return auc, average_precision_score
-
 
 def top_k_trees(sk_IF, k, val_data, val_labels, skip=False, indices=None):
     new_IF = copy.deepcopy(sk_IF)
@@ -105,7 +103,6 @@ def top_k_trees(sk_IF, k, val_data, val_labels, skip=False, indices=None):
 
     return new_IF
 
-
 def compute_tree_anomaly_scores(forest, data):
     collection_tree_anomaly_scores = []
 
@@ -119,7 +116,6 @@ def compute_tree_anomaly_scores(forest, data):
 
     return 2 ** -(np.array(collection_tree_anomaly_scores) / norm)
 
-
 def sorted_indices_trees(sk_IF, val_data, val_labels):
     # compute the anomaly scores for each data sample
     tree_train = compute_tree_anomaly_scores(sk_IF, val_data)
@@ -130,7 +126,6 @@ def sorted_indices_trees(sk_IF, val_data, val_labels):
     sorted_indices = np.argsort(ap_tree_train)
 
     return sorted_indices  # from worst to best tree
-
 
 def compute_tree_scores_rf(forest, data):
 
@@ -148,7 +143,6 @@ def sorted_indices_trees_rf(rf, val_data, val_labels):
     sorted_indices = np.argsort(ap_tree)  
     
     return sorted_indices   # from worst to best tree
-
 
 def pruned_forest(sk_IF, indices):
     new_IF = copy.deepcopy(sk_IF)
