@@ -120,7 +120,7 @@ def compute_and_save_scores(dataset_name, data, labels, n_trees, n_runs, val_siz
 
 if __name__ == "__main__":
     # Parameters
-    n_runs = 10
+    n_runs = 50
     n_trees = [100, 300, 1000]
     val_sizes = [0.01, 0.05, 0.1, 0.2]
     test_size = 0.2
@@ -129,7 +129,8 @@ if __name__ == "__main__":
     if not os.path.exists(main_save_dir):
         os.makedirs(main_save_dir)
 
-    for dataset_name in tqdm(odds_datasets.small_datasets_names, desc="Processing datasets"):
+
+    for dataset_name in tqdm(odds_datasets.large_datasets_names, desc="Processing datasets"):
         data, labels = odds_datasets.load(dataset_name)
         for val_size in val_sizes:
             val_size_dir = os.path.join(main_save_dir, f"val_size_{val_size}")

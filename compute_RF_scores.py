@@ -67,7 +67,7 @@ def compute_and_save_rf_scores(dataset_name, data, labels, n_trees, n_runs, val_
 
 if __name__ == "__main__":
     # Parameters
-    n_runs = 10
+    n_runs = 50
     n_trees = [100, 300, 1000]
     val_sizes = [0.01, 0.05, 0.1, 0.2] 
     test_size = 0.2

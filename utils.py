@@ -65,18 +65,23 @@ def plot_prc(y_true, y_pred, title=''):
 
     # return auc, average_precision_score
 
-def plot_avg_prc(ap_scores, color=None, label=None, verbose=False):
+def plot_avg_prc(ap_scores, color=None, label=None, verbose=False, n_runs=50):
 
     mean_ap = np.mean(ap_scores, axis=0)
     std_ap = np.std(ap_scores, axis=0)
+
+    sem = std_ap / np.sqrt(n_runs)
+
     x = range(1, len(mean_ap) + 1)
 
     if color is not None:
         plt.plot(x, mean_ap, color=color, label=label)
-        plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, color=color, alpha=0.2)
+        #plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, color=color, alpha=0.2)
+        plt.fill_between(x, mean_ap - sem, mean_ap + sem, color=color, alpha=0.2)
     else:
         plt.plot(x, mean_ap, label=label)
-        plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, alpha=0.2)
+        #plt.fill_between(x, mean_ap - std_ap, mean_ap + std_ap, alpha=0.2)
+        plt.fill_between(x, mean_ap - sem, mean_ap + sem, color=color, alpha=0.2)
 
     if verbose:
         print("\n--- Average Precision Scores ---")

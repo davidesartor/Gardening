@@ -26,7 +26,7 @@ def plot_from_saved_data(save_dir, dataset_name, n_trees, n_runs):
     # configuring axes
     plt.xscale('log')
     plt.xlabel('Number of Trees Used (Cumulative, Log Scale)')
-    plt.ylabel(f'Average Precision Score (Avg +/- Std Dev over {n_runs} runs)')
+    plt.ylabel(f'Average Precision Score (Avg +/- SEM over {n_runs} runs)')
     plt.grid(True, which="both")
     plt.legend()
     save_dir = os.path.dirname(save_dir)
@@ -53,6 +53,7 @@ def plot_bf_points(save_dir, dataset_name, n_trees, bf_values, n_runs, max_iter)
     for n_idx, (n, color) in enumerate(zip(n_trees, colormap.colors)):
         # Plot greedy curves
         ap_scores = ap_scores_dict[n]  # (n_runs, n)
+        # This assumes plot_avg_prc in your utils.py has been updated to use SEM
         plot_avg_prc(ap_scores, color=color, label=f'Greedy ({n} Trees)')
 
         # Plot brute-force points for the current n
@@ -67,22 +68,24 @@ def plot_bf_points(save_dir, dataset_name, n_trees, bf_values, n_runs, max_iter)
                 current_bf_x_vals = np.array(bf_values)[valid_bf_values_indices]
 
                 # Plot mean brute-force AP with error bars
-                # Ensure we only take valid (non-NaN) data for mean/std calculation from the correct slice
                 mean_ap_bf = np.array([np.mean(ap_bf_scores_for_n[:, i][~np.isnan(ap_bf_scores_for_n[:, i])]) 
                                        for i in valid_bf_values_indices])
+                
+                # Calculate Standard Error of the Mean for the error bars
                 std_ap_bf = np.array([np.std(ap_bf_scores_for_n[:, i][~np.isnan(ap_bf_scores_for_n[:, i])]) 
                                       for i in valid_bf_values_indices])
+                sem_ap_bf = std_ap_bf / np.sqrt(n_runs)
                 
                 # Check for valid mean values before plotting
                 valid_mean_ap_indices = ~np.isnan(mean_ap_bf)
                 if np.any(valid_mean_ap_indices):
                     plt.errorbar(current_bf_x_vals[valid_mean_ap_indices], mean_ap_bf[valid_mean_ap_indices], 
-                                 yerr=std_ap_bf[valid_mean_ap_indices], fmt='o', color=color, capsize=5, 
+                                 yerr=sem_ap_bf[valid_mean_ap_indices], fmt='o', color=color, capsize=5, 
                                  label=f'BF Avg ({n} Trees, {max_iter} iter)', # Unique label for each n
                                  markerfacecolor=color, markeredgecolor='black', markersize=6)
 
                 # Plot the highest AP point obtained in the brute-force search
-                highest_overall_ap = np.array([np.max(max_ap_bf_scores_for_n[:, i][~np.isnan(max_ap_bf_scores_for_n[:, i])]) 
+                highest_overall_ap = np.array([np.mean(max_ap_bf_scores_for_n[:, i][~np.isnan(max_ap_bf_scores_for_n[:, i])]) 
                                                if np.any(~np.isnan(max_ap_bf_scores_for_n[:, i])) else np.nan
                                                for i in valid_bf_values_indices])
                 
@@ -97,7 +100,7 @@ def plot_bf_points(save_dir, dataset_name, n_trees, bf_values, n_runs, max_iter)
     # Configuring axes
     plt.xscale('log')
     plt.xlabel('Number of Trees Used (Cumulative for Greedy, Specified for Brute-Force, Log Scale)')
-    plt.ylabel(f'Average Precision Score (Avg +/- Std Dev over {n_runs} runs)')
+    plt.ylabel(f'Average Precision Score (Avg +/- SEM over {n_runs} runs)')
     plt.grid(True, which="both")
     plt.legend()
     save_dir = os.path.dirname(save_dir)
@@ -107,7 +110,7 @@ def plot_bf_points(save_dir, dataset_name, n_trees, bf_values, n_runs, max_iter)
 
 if __name__ == "__main__":
     # Parameters
-    n_runs = 10
+    n_runs = 50
     n_trees = [100, 300, 1000]
     val_sizes = [0.01, 0.05, 0.1, 0.2]
     test_size = 0.2

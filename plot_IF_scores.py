@@ -79,7 +79,7 @@ def plot_from_saved_data_by_n_trees(main_save_dir, dataset_name, n_trees_list, v
 
         plt.xscale('log')
         plt.xlabel('Number of Trees Used (Cumulative, Log Scale)')
-        plt.ylabel(f'Average Precision (Avg +/- Std Dev over {n_runs} runs)')
+        plt.ylabel(f'Average Precision (Avg +/- SEM over {n_runs} runs)')
         plt.grid(True, which="both")
         plt.legend()
         plt.ylim(0, 1)
@@ -88,7 +88,7 @@ def plot_from_saved_data_by_n_trees(main_save_dir, dataset_name, n_trees_list, v
 
 if __name__ == "__main__":
     # Parameters
-    n_runs = 10
+    n_runs = 50
     n_trees = [100, 300, 1000]
     val_sizes = [0.01, 0.05, 0.1, 0.2]
     main_save_dir = "results_if"

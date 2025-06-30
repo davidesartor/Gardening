@@ -14,7 +14,7 @@ def load_ap_scores(model_dir, dataset_name, val_size):
     print(f"File '{npz_path}' not found.")
     return None
 
-def plot_combined_results(ap_scores_if, ap_scores_gif, dataset_name, val_size, save_dir, n_trees):
+def plot_combined_results(ap_scores_if, ap_scores_gif, dataset_name, val_size, save_dir, n_trees, n_runs):
     plt.figure(figsize=(10, 7))
     plt.title(f"AP Comparison: IF vs GIF on {dataset_name} (Val Size: {val_size})")
     
@@ -28,9 +28,12 @@ def plot_combined_results(ap_scores_if, ap_scores_gif, dataset_name, val_size, s
             if_scores = ap_scores_if[n]
             mean_if = np.mean(if_scores, axis=0)
             std_if = np.std(if_scores, axis=0)
+            # Calculate Standard Error of the Mean
+            sem_if = std_if / np.sqrt(n_runs)
             x_if = range(1, len(mean_if) + 1)
             plt.plot(x_if, mean_if, color=color, linestyle=linestyles['IF'], label=f'IF ({n} Trees)')
-            plt.fill_between(x_if, mean_if - std_if, mean_if + std_if, color=color, alpha=0.1)
+            # Use SEM for the error band
+            plt.fill_between(x_if, mean_if - sem_if, mean_if + sem_if, color=color, alpha=0.1)
         else:
             print(f"Warning: IF scores for n={n} not found for {dataset_name}, val_size={val_size}")
 
@@ -38,16 +41,19 @@ def plot_combined_results(ap_scores_if, ap_scores_gif, dataset_name, val_size, s
             gif_scores = ap_scores_gif[n]
             mean_gif = np.mean(gif_scores, axis=0)
             std_gif = np.std(gif_scores, axis=0)
+            # Calculate Standard Error of the Mean
+            sem_gif = std_gif / np.sqrt(gif_scores.shape[0])
             x_gif = range(1, len(mean_gif) + 1)
             plt.plot(x_gif, mean_gif, color=color, linestyle=linestyles['GIF'], label=f'GIF ({n} Trees)')
-            plt.fill_between(x_gif, mean_gif - std_gif, mean_gif + std_gif, color=color, alpha=0.1)
+            # Use SEM for the error band
+            plt.fill_between(x_gif, mean_gif - sem_gif, mean_gif + sem_gif, color=color, alpha=0.1)
         else:
             print(f"Warning: GIF scores for n={n} not found for {dataset_name}, val_size={val_size}")
     
     plt.xscale('log')
-    plt.ylim(bottom=0.1)  # <-- Set y-axis lower limit
+    plt.ylim(bottom=0.1)
     plt.xlabel('Number of Trees Used (Cumulative, Log Scale)')
-    plt.ylabel('Average Precision Score (Avg ± Std over 10 runs)')
+    plt.ylabel(f'Average Precision Score (Avg ± SEM over {n_runs} runs)')
     plt.grid(True, which='both')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
@@ -58,6 +64,7 @@ def plot_combined_results(ap_scores_if, ap_scores_gif, dataset_name, val_size, s
 
 
 if __name__ == "__main__":
+    n_runs = 50
     n_trees = [100, 300, 1000]
     val_sizes = [0.01, 0.05, 0.1, 0.2]
     models = {'IF': 'results_if', 'GIF': 'results_greedy_if'}
@@ -76,7 +83,7 @@ if __name__ == "__main__":
             os.makedirs(save_dir, exist_ok=True)
             
             try:
-                plot_combined_results(ap_scores_if, ap_scores_gif, dataset, val_size, save_dir, n_trees)
-            except Exception as e: # Catching a more general exception for robustness
+                plot_combined_results(ap_scores_if, ap_scores_gif, dataset, val_size, save_dir, n_trees, n_runs)
+            except Exception as e:
                 print(f"Error plotting results for {dataset} with val size {val_size}: {e}")
                 continue

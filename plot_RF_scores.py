@@ -17,20 +17,25 @@ def plot_all_val_sizes(dataset_name, val_sizes, n_trees, main_save_dir, n_runs):
         ap_scores_dict = data['ap_scores'].item()
         
         means = []
-        stds = []
+        # Changed list name
+        sems = []
         for n in n_trees:
             ap_scores = ap_scores_dict[n]  # Shape: (n_runs,)
             mean_ap = np.mean(ap_scores)
+            
+            #Calculate Standard Error of the Mean (SEM)
             std_ap = np.std(ap_scores)
+            sem = std_ap / np.sqrt(n_runs) 
+            
             means.append(mean_ap)
-            stds.append(std_ap)
+            sems.append(sem)
         
         color = colormap(idx)
-        plt.errorbar(n_trees, means, yerr=stds, fmt='o-', capsize=5, color=color, label=f'Val Size {val_size}')
+        plt.errorbar(n_trees, means, yerr=sems, fmt='o-', capsize=5, color=color, label=f'Val Size {val_size}')
     
     plt.title(f"Average Precision Score vs Number of Trees on {dataset_name}")
     plt.xlabel('Number of Trees in Forest')
-    plt.ylabel(f'Average Precision Score (Avg +/- Std Dev over {n_runs} runs)')
+    plt.ylabel(f'Average Precision Score (Avg +/- SEM over {n_runs} runs)')
     plt.legend()
     plt.grid(True)
     
@@ -72,21 +77,27 @@ def plot_by_n_trees_rf(main_save_dir, dataset_name, n_trees_list, val_sizes_list
         colors = [colormap(i) for i in range(len(val_sizes_list))]
 
         means_across_val_sizes = []
-        stds_across_val_sizes = []
+        sems_across_val_sizes = []
         valid_val_sizes_for_plot = []
 
         for val_size in val_sizes_list:
             if val_size in aggregated_ap_data[n_trees_val]:
                 ap_scores = aggregated_ap_data[n_trees_val][val_size]
-                means_across_val_sizes.append(np.mean(ap_scores))
-                stds_across_val_sizes.append(np.std(ap_scores))
-                valid_val_sizes_for_plot.append(str(val_size)) # Convert to string for x-axis ticks
+                
+                #Calculate Standard Error of the Mean (SEM)
+                mean_ap = np.mean(ap_scores)
+                std_ap = np.std(ap_scores)
+                sem = std_ap / np.sqrt(len(ap_scores))
 
-        plt.errorbar(valid_val_sizes_for_plot, means_across_val_sizes, yerr=stds_across_val_sizes,
-                     fmt='o-', capsize=5, color=colors[0]) # Use first color, as lines are for N_trees
+                means_across_val_sizes.append(mean_ap)
+                sems_across_val_sizes.append(sem)
+                valid_val_sizes_for_plot.append(str(val_size))
+
+        plt.errorbar(valid_val_sizes_for_plot, means_across_val_sizes, yerr=sems_across_val_sizes,
+                     fmt='o-', capsize=5, color=colors[0])
 
         plt.xlabel('Validation Set Size')
-        plt.ylabel(f'Average Precision (Avg +/- Std Dev over {n_runs} runs)')
+        plt.ylabel(f'Average Precision (Avg +/- SEM over {n_runs} runs)')
         plt.grid(True)
         plt.ylim(0, 1)
         plt.savefig(os.path.join(plot_save_dir, f"avg_precision_{dataset_name}_N_{n_trees_val}.pdf"), bbox_inches='tight')
@@ -94,7 +105,7 @@ def plot_by_n_trees_rf(main_save_dir, dataset_name, n_trees_list, val_sizes_list
 
 if __name__ == "__main__":
     # Parameters
-    n_runs = 10
+    n_runs = 50
     n_trees = [100, 300, 1000]
     val_sizes = [0.01, 0.05, 0.1, 0.2] 
     test_size = 0.2
